@@ -83,7 +83,7 @@ if [ -z "${CONTENT_LENGTH:-}" ] || [ "${CONTENT_LENGTH:-0}" = "0" ]; then
   echo ""
   echo "<html><body><h2>Send SMS</h2><form method=POST>"
   echo "<input type=password name=password placeholder=Password><br>"
-  echo "<input name=to placeholder=+17192291657><br>"
+  echo "<input name=to placeholder=+13038675309><br>"
   echo "<textarea name=message></textarea><br>"
   echo "<button type=submit>Send</button></form></body></html>"
   exit 0
