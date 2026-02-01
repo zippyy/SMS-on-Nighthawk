@@ -10,7 +10,7 @@ This uses **paced AT commands** (required on MR6500 firmware) via BusyBox `httpd
 - ✅ Send SMS (E.164, 1–160 chars)
 - ✅ Inbox viewer (`AT+CMGL="ALL"`)
 - ✅ Delete SMS by index (`AT+CMGD=<idx>`)
-- ✅ One-line install (wget)
+- ✅ One-line Interactive install (wget)
 - ✅ No Perl, no curl, no packages
 
 ---
