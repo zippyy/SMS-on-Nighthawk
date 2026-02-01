@@ -181,3 +181,6 @@ netstat -an | grep ':767'
 pkill httpd
 rm -rf /www/cgi-bin/sms_*.sh /www/sms
 ```
+
+
+Inspiration from [This Blog](https://www.tarball.ca/posts/netgear-nighthawk-m6-pro-sms-server/)
