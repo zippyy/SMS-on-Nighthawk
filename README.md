@@ -19,5 +19,6 @@ This uses **paced AT commands** (required on MR6500 firmware) via BusyBox `httpd
 Run on the router over SSH:
 
 ```sh
-SMS_PASSWORD='super-long-password' SMS_PORT=767 sh -c "$(wget -qO- https://raw.githubusercontent.com/<USER>/<REPO>/main/install.sh)"
+sh -c "$(wget -qO- https://raw.githubusercontent.com/zippyy/SMS-on-Nighthawk/main/install.sh)"
+"
 ```
