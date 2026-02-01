@@ -9,6 +9,48 @@ CFG="$APP_DIR/config.sh"
 DEFAULT_PORT="767"
 DEFAULT_MODEM="/dev/smd8"
 
+kill_port_listener() {
+  PORT="$1"
+  PID=""
+
+  # Try netstat with pid/prog if available
+  PID="$(netstat -anp 2>/dev/null | awk -v p=":$PORT" '
+    $0 ~ p && $0 ~ /LISTEN/ {
+      split($NF,a,"/");
+      if (a[1] ~ /^[0-9]+$/) { print a[1]; exit }
+    }')"
+
+  # Try ss if present
+  if [ -z "$PID" ] && command -v ss >/dev/null 2>&1; then
+    PID="$(ss -ltnp 2>/dev/null | awk -v p=":$PORT" '
+      $0 ~ p {
+        if (match($0,/pid=([0-9]+)/,m)) { print m[1]; exit }
+      }')"
+  fi
+
+  # Try lsof if present
+  if [ -z "$PID" ] && command -v lsof >/dev/null 2>&1; then
+    PID="$(lsof -iTCP:"$PORT" -sTCP:LISTEN -t 2>/dev/null | head -n 1 || true)"
+  fi
+
+  if [ -n "$PID" ]; then
+    echo "Port $PORT is in use by PID $PID. Killing..."
+    kill "$PID" 2>/dev/null || true
+    sleep 0.3
+    kill -9 "$PID" 2>/dev/null || true
+    sleep 0.3
+    return 0
+  fi
+
+  # Last resort (PID unknown)
+  if netstat -an 2>/dev/null | grep -q ":$PORT"; then
+    echo "Port $PORT is in use but PID is unknown. Killing httpd as fallback..."
+    pkill httpd 2>/dev/null || true
+    pkill -9 httpd 2>/dev/null || true
+    sleep 0.3
+  fi
+}
+
 echo "========================================"
 echo " MR6500 SMS Web – Interactive Installer "
 echo "========================================"
@@ -18,28 +60,19 @@ mkdir -p "$CGI_DIR" "$APP_DIR"
 
 # ----- Existing config handling -----
 if [ -f "$CFG" ]; then
-  echo "Existing config found at:"
-  echo "  $CFG"
-  echo ""
-  echo "Choose an option:"
+  echo "Existing config found: $CFG"
   echo "  1) Keep existing config (recommended)"
   echo "  2) Reconfigure"
-  echo ""
   printf "Selection [1/2]: "
   read choice
   case "$choice" in
-    2)
-      RECONFIGURE=1
-      ;;
-    *)
-      RECONFIGURE=0
-      ;;
+    2) RECONFIGURE=1 ;;
+    *) RECONFIGURE=0 ;;
   esac
 else
   RECONFIGURE=1
 fi
 
-# ----- Configure -----
 if [ "$RECONFIGURE" = "1" ]; then
   echo ""
   echo "=== Configuration ==="
@@ -73,7 +106,6 @@ SMS_PASSWORD='$SMS_PASSWORD'
 SMS_PORT='$SMS_PORT'
 MODEM='$MODEM'
 EOF
-
   chmod 600 "$CFG" 2>/dev/null || true
 
   echo ""
@@ -81,13 +113,14 @@ EOF
 else
   . "$CFG"
   SMS_PORT="${SMS_PORT:-$DEFAULT_PORT}"
+  MODEM="${MODEM:-$DEFAULT_MODEM}"
 fi
 
-# ----- Install CGI scripts -----
 echo ""
 echo "Installing CGI scripts..."
 
-cat > "$CGI_DIR/sms_send.sh" <<'EOF'
+# ----- sms_send.sh -----
+cat > "$CGI_DIR/sms_send.sh" <<'EOF_SEND'
 #!/bin/sh
 CFG="/www/sms/config.sh"
 [ -f "$CFG" ] && . "$CFG"
@@ -114,27 +147,43 @@ if [ -z "${CONTENT_LENGTH:-}" ] || [ "${CONTENT_LENGTH:-0}" = "0" ]; then
   cat <<'HTML'
 <!doctype html>
 <html><head>
+<meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Send SMS</title>
+<title>MR6500 SMS</title>
 <style>
-body{font-family:system-ui;margin:20px;max-width:900px}
-.top{display:flex;gap:10px}
-a,button{padding:10px 14px;border:1px solid #ccc;border-radius:10px;background:#fff}
-.card{border:1px solid #ddd;border-radius:12px;padding:16px;margin-top:14px}
-input,textarea{width:100%;padding:10px;border-radius:10px;border:1px solid #ccc}
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:20px;max-width:900px}
+  .top{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  a.btn,button{display:inline-block;padding:10px 14px;border:1px solid #ccc;border-radius:10px;text-decoration:none;color:#111;background:#fff;cursor:pointer}
+  .card{border:1px solid #ddd;border-radius:12px;padding:16px;margin-top:14px}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  label{font-size:13px;color:#555}
+  input,textarea{width:100%;padding:10px;border:1px solid #ccc;border-radius:10px;font-size:16px}
+  textarea{min-height:110px;resize:vertical}
+  .muted{color:#666;font-size:13px}
 </style>
 </head><body>
 <div class="top">
-  <a href="/cgi-bin/sms_send.sh">Send SMS</a>
-  <a href="/cgi-bin/sms_inbox.sh">Inbox</a>
+  <a class="btn" href="/cgi-bin/sms_send.sh">Send SMS</a>
+  <a class="btn" href="/cgi-bin/sms_inbox.sh">Inbox</a>
 </div>
+
 <div class="card">
 <h2>Send SMS</h2>
+<p class="muted">E.164 required (e.g. +17192291657). Max 160 chars. LAN-only recommended.</p>
 <form method="POST">
-<input type="password" name="password" placeholder="Password" required><br><br>
-<input name="to" placeholder="+17192291657" required><br><br>
-<textarea name="message" maxlength="160" required></textarea><br><br>
-<button type="submit">Send</button>
+  <div class="row">
+    <div>
+      <label>Password</label>
+      <input type="password" name="password" required>
+    </div>
+    <div>
+      <label>To</label>
+      <input name="to" placeholder="+17192291657" maxlength="16" required>
+    </div>
+  </div>
+  <label>Message</label>
+  <textarea name="message" maxlength="160" required></textarea>
+  <button type="submit">Send SMS</button>
 </form>
 </div>
 </body></html>
@@ -151,20 +200,130 @@ echo "Content-Type: text/plain"
 echo ""
 
 [ "$pw" = "$PASSWORD" ] || { echo "ERROR: bad password"; exit 0; }
+echo "$to" | grep -qE '^\+[0-9]{8,15}$' || { echo "ERROR: invalid number"; exit 0; }
+[ -n "$msg" ] || { echo "ERROR: empty message"; exit 0; }
+[ "$(printf "%s" "$msg" | wc -c)" -le 160 ] || { echo "ERROR: message too long"; exit 0; }
+
 send_sms "$to" "$msg"
 echo "OK: sent"
-EOF
-
+EOF_SEND
 chmod +x "$CGI_DIR/sms_send.sh"
 
-# Inbox script assumed already in repo; not duplicated here for brevity
-# (you already added it earlier)
+# ----- sms_inbox.sh -----
+cat > "$CGI_DIR/sms_inbox.sh" <<'EOF_INBOX'
+#!/bin/sh
+CFG="/www/sms/config.sh"
+[ -f "$CFG" ] && . "$CFG"
 
-# ----- Restart httpd -----
+PASSWORD="${SMS_PASSWORD:-changeme}"
+MODEM="${MODEM:-/dev/smd8}"
+
+urldecode() { printf '%b' "$(echo "$1" | sed 's/+/ /g;s/%/\\x/g')"; }
+
+get_qs() { echo "${REQUEST_URI#*\?}" | grep -q '=' && echo "${REQUEST_URI#*\?}" || echo ""; }
+qs_get() { KEY="$1"; echo "$QS" | tr '&' '\n' | sed -n "s/^${KEY}=//p" | head -n 1; }
+
+read_modem_block() {
+  i=0
+  while [ $i -lt 80 ]; do
+    if read -t 0.2 line < "$MODEM"; then echo "$line"; fi
+    i=$((i+1))
+  done
+}
+
+at_cmd() { CMD="$1"; echo -e "${CMD}\r" > "$MODEM"; sleep 0.4; read_modem_block; }
+escape_html() { echo "$1" | sed 's/&/\&amp;/g;s/</\&lt;/g;s/>/\&gt;/g'; }
+
+echo "Content-Type: text/html"
 echo ""
-echo "Restarting web server..."
-pkill httpd 2>/dev/null || true
-busybox httpd -p "$SMS_PORT" -h /www &
+
+QS="$(get_qs)"
+pw="$(urldecode "$(qs_get password)")"
+del="$(urldecode "$(qs_get delete)")"
+
+cat <<'HTML'
+<!doctype html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MR6500 SMS Inbox</title>
+<style>
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:20px;max-width:900px}
+  .top{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  a.btn,button{display:inline-block;padding:10px 14px;border:1px solid #ccc;border-radius:10px;text-decoration:none;color:#111;background:#fff;cursor:pointer}
+  .card{border:1px solid #ddd;border-radius:12px;padding:16px;margin-top:14px}
+  input{padding:10px;border:1px solid #ccc;border-radius:10px;font-size:16px}
+  pre{background:#f6f6f6;border-radius:10px;padding:12px;white-space:pre-wrap;overflow:auto}
+  .muted{color:#666;font-size:13px}
+</style>
+</head><body>
+<div class="top">
+  <a class="btn" href="/cgi-bin/sms_send.sh">Send SMS</a>
+  <a class="btn" href="/cgi-bin/sms_inbox.sh">Inbox</a>
+</div>
+HTML
+
+if [ -z "$pw" ]; then
+  cat <<'HTML'
+<div class="card">
+  <h2>Inbox</h2>
+  <form method="GET" action="/cgi-bin/sms_inbox.sh" class="top">
+    <input type="password" name="password" placeholder="Password" required>
+    <button type="submit">View</button>
+  </form>
+</div></body></html>
+HTML
+  exit 0
+fi
+
+if [ "$pw" != "$PASSWORD" ]; then
+  echo '<div class="card"><h2>Inbox</h2><pre>ERROR: bad password</pre></div></body></html>'
+  exit 0
+fi
+
+DEL_OUT=""
+if echo "$del" | grep -qE '^[0-9]+$'; then
+  TMP="$(at_cmd "AT+CMGD=$del")"
+  DEL_OUT="$(echo "$TMP" | grep -E 'OK|ERROR|\+CMS ERROR' | tail -n 3)"
+fi
+
+OUT1="$(at_cmd 'AT+CMGF=1')"
+OUT2="$(at_cmd 'AT+CMGL="ALL"')"
+RAW="$(printf "%s\n%s\n" "$OUT1" "$OUT2")"
+
+cat <<HTML
+<div class="card">
+  <h2>Inbox</h2>
+  <div class="top">
+    <a class="btn" href="/cgi-bin/sms_inbox.sh?password=$(printf "%s" "$pw" | sed 's/ /%20/g')">Refresh</a>
+  </div>
+  <p class="muted">Delete by index shown in <code>+CMGL: &lt;idx&gt;</code></p>
+  <form method="GET" action="/cgi-bin/sms_inbox.sh" class="top" style="margin-top:12px">
+    <input type="hidden" name="password" value="">
+    <script>
+      (function(){ const p=new URLSearchParams(location.search).get('password')||''; document.querySelector('input[name=password]').value=p; })();
+    </script>
+    <input name="delete" placeholder="Delete index (e.g. 3)">
+    <button type="submit">Delete</button>
+  </form>
+HTML
+
+if [ -n "$DEL_OUT" ]; then
+  echo "<p class=\"muted\"><b>Delete result:</b></p><pre>$(escape_html "$DEL_OUT")</pre>"
+fi
+
+echo "<h3>Raw output</h3><pre>$(escape_html "$RAW")</pre>"
+echo "</div></body></html>"
+EOF_INBOX
+chmod +x "$CGI_DIR/sms_inbox.sh"
+
+echo ""
+echo "Restarting web server on port $SMS_PORT..."
+
+kill_port_listener "$SMS_PORT"
+
+# Start our BusyBox httpd
+busybox httpd -p "$SMS_PORT" -h "$WWW_ROOT" &
 
 echo ""
 echo "========================================"
@@ -173,5 +332,6 @@ echo "----------------------------------------"
 echo " Send:  http://<router-ip>:${SMS_PORT}/cgi-bin/sms_send.sh"
 echo " Inbox: http://<router-ip>:${SMS_PORT}/cgi-bin/sms_inbox.sh"
 echo " Config: $CFG"
-echo  " Created with <3 by Zippy - https://techrelay.xyz"
+echo " Made with <3 by Zippyy - https://techrelay.xyz"
 echo "========================================"
+
