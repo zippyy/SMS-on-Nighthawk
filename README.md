@@ -17,6 +17,8 @@ This uses **paced AT commands** (required on MR6500 firmware) via BusyBox `httpd
 
 ## Manual Install 
 
+You can find the manual installation instructions at the link below. 
+
 [Manual-Install Instructions](https://github.com/zippyy/SMS-on-Nighthawk/blob/main/manual-install.md)
 
 ---
