@@ -13,14 +13,12 @@ kill_port_listener() {
   PORT="$1"
   PID=""
 
-  # Try netstat with pid/prog if available
   PID="$(netstat -anp 2>/dev/null | awk -v p=":$PORT" '
     $0 ~ p && $0 ~ /LISTEN/ {
       split($NF,a,"/");
       if (a[1] ~ /^[0-9]+$/) { print a[1]; exit }
     }')"
 
-  # Try ss if present
   if [ -z "$PID" ] && command -v ss >/dev/null 2>&1; then
     PID="$(ss -ltnp 2>/dev/null | awk -v p=":$PORT" '
       $0 ~ p {
@@ -28,7 +26,6 @@ kill_port_listener() {
       }')"
   fi
 
-  # Try lsof if present
   if [ -z "$PID" ] && command -v lsof >/dev/null 2>&1; then
     PID="$(lsof -iTCP:"$PORT" -sTCP:LISTEN -t 2>/dev/null | head -n 1 || true)"
   fi
@@ -42,7 +39,6 @@ kill_port_listener() {
     return 0
   fi
 
-  # Last resort (PID unknown)
   if netstat -an 2>/dev/null | grep -q ":$PORT"; then
     echo "Port $PORT is in use but PID is unknown. Killing httpd as fallback..."
     pkill httpd 2>/dev/null || true
@@ -119,7 +115,7 @@ fi
 echo ""
 echo "Installing CGI scripts..."
 
-# ----- sms_send.sh -----
+# ----- sms_send.sh (HTML result + Send another button) -----
 cat > "$CGI_DIR/sms_send.sh" <<'EOF_SEND'
 #!/bin/sh
 CFG="/www/sms/config.sh"
@@ -141,6 +137,7 @@ send_sms() {
   echo -e "$MSG\x1A" > "$MODEM"
 }
 
+# GET: UI
 if [ -z "${CONTENT_LENGTH:-}" ] || [ "${CONTENT_LENGTH:-0}" = "0" ]; then
   echo "Content-Type: text/html"
   echo ""
@@ -160,6 +157,7 @@ if [ -z "${CONTENT_LENGTH:-}" ] || [ "${CONTENT_LENGTH:-0}" = "0" ]; then
   input,textarea{width:100%;padding:10px;border:1px solid #ccc;border-radius:10px;font-size:16px}
   textarea{min-height:110px;resize:vertical}
   .muted{color:#666;font-size:13px}
+  pre{background:#f6f6f6;border-radius:10px;padding:12px;white-space:pre-wrap}
 </style>
 </head><body>
 <div class="top">
@@ -191,21 +189,64 @@ HTML
   exit 0
 fi
 
+# POST: result page with "Send another"
 read -n "$CONTENT_LENGTH" RAW
 pw=$(urldecode "$(echo "$RAW" | sed -n 's/.*password=\([^&]*\).*/\1/p')")
 to=$(urldecode "$(echo "$RAW" | sed -n 's/.*to=\([^&]*\).*/\1/p')")
 msg=$(urldecode "$(echo "$RAW" | sed -n 's/.*message=\(.*\)/\1/p')")
 
-echo "Content-Type: text/plain"
+echo "Content-Type: text/html"
 echo ""
 
-[ "$pw" = "$PASSWORD" ] || { echo "ERROR: bad password"; exit 0; }
-echo "$to" | grep -qE '^\+[0-9]{8,15}$' || { echo "ERROR: invalid number"; exit 0; }
-[ -n "$msg" ] || { echo "ERROR: empty message"; exit 0; }
-[ "$(printf "%s" "$msg" | wc -c)" -le 160 ] || { echo "ERROR: message too long"; exit 0; }
+cat <<'HTML'
+<!doctype html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MR6500 SMS</title>
+<style>
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:20px;max-width:900px}
+  .top{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  a.btn,button{display:inline-block;padding:10px 14px;border:1px solid #ccc;border-radius:10px;text-decoration:none;color:#111;background:#fff;cursor:pointer}
+  .card{border:1px solid #ddd;border-radius:12px;padding:16px;margin-top:14px}
+  .muted{color:#666;font-size:13px}
+  pre{background:#f6f6f6;border-radius:10px;padding:12px;white-space:pre-wrap}
+</style>
+</head><body>
+<div class="top">
+  <a class="btn" href="/cgi-bin/sms_send.sh">Send SMS</a>
+  <a class="btn" href="/cgi-bin/sms_inbox.sh">Inbox</a>
+</div>
+HTML
+
+fail() {
+  MSG="$1"
+  cat <<HTML
+<div class="card">
+  <h2>Send SMS</h2>
+  <pre>$MSG</pre>
+  <p class="muted"><a class="btn" href="/cgi-bin/sms_send.sh">Back</a></p>
+</div>
+</body></html>
+HTML
+  exit 0
+}
+
+[ "$pw" = "$PASSWORD" ] || fail "ERROR: bad password"
+echo "$to" | grep -qE '^\+[0-9]{8,15}$' || fail "ERROR: invalid number"
+[ -n "$msg" ] || fail "ERROR: empty message"
+[ "$(printf "%s" "$msg" | wc -c)" -le 160 ] || fail "ERROR: message too long"
 
 send_sms "$to" "$msg"
-echo "OK: sent"
+
+cat <<'HTML'
+<div class="card">
+  <h2>Send SMS</h2>
+  <pre>OK: sent</pre>
+  <p class="muted"><a class="btn" href="/cgi-bin/sms_send.sh">Send another</a></p>
+</div>
+</body></html>
+HTML
 EOF_SEND
 chmod +x "$CGI_DIR/sms_send.sh"
 
@@ -319,10 +360,7 @@ chmod +x "$CGI_DIR/sms_inbox.sh"
 
 echo ""
 echo "Restarting web server on port $SMS_PORT..."
-
 kill_port_listener "$SMS_PORT"
-
-# Start our BusyBox httpd
 busybox httpd -p "$SMS_PORT" -h "$WWW_ROOT" &
 
 echo ""
@@ -334,4 +372,3 @@ echo " Inbox: http://<router-ip>:${SMS_PORT}/cgi-bin/sms_inbox.sh"
 echo " Config: $CFG"
 echo " Made with <3 by Zippyy - https://techrelay.xyz"
 echo "========================================"
-
