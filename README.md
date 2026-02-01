@@ -20,7 +20,6 @@ This uses **paced AT commands** (required on MR6500 firmware) via BusyBox `httpd
 [Manual-Install Instructions](https://github.com/zippyy/SMS-on-Nighthawk/blob/main/manual-install.md)
 
 ---
----
 
 ## One-line install (wget)
 Run on the router over SSH:
@@ -28,3 +27,5 @@ Run on the router over SSH:
 ```sh
 sh -c "$(wget -qO- https://raw.githubusercontent.com/zippyy/SMS-on-Nighthawk/main/install.sh)"
 ```
+
+---
