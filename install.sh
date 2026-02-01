@@ -167,7 +167,7 @@ if [ -z "${CONTENT_LENGTH:-}" ] || [ "${CONTENT_LENGTH:-0}" = "0" ]; then
 
 <div class="card">
 <h2>Send SMS</h2>
-<p class="muted">E.164 required (e.g. +13038675309). Max 160 chars. LAN-only recommended.</p>
+<p class="muted">E.164 required (e.g. +13038675309). Max 160 chars. Made with <3 Zippyy - <a href="https://techrelay.xyz">Tech Relay</a></p>
 <form method="POST">
   <div class="row">
     <div>
