@@ -1,0 +1,23 @@
+# MR6500 SMS Web (BusyBox)
+
+A tiny web UI to **send SMS** and **view inbox** on the Netgear Nighthawk MR6500 / M6 Pro using `/dev/smd8`.
+
+This uses **paced AT commands** (required on MR6500 firmware) via BusyBox `httpd` + CGI.
+
+---
+
+## Features
+- ✅ Send SMS (E.164, 1–160 chars)
+- ✅ Inbox viewer (`AT+CMGL="ALL"`)
+- ✅ Delete SMS by index (`AT+CMGD=<idx>`)
+- ✅ One-line install (wget)
+- ✅ No Perl, no curl, no packages
+
+---
+
+## One-line install (wget)
+Run on the router over SSH:
+
+```sh
+SMS_PASSWORD='super-long-password' SMS_PORT=767 sh -c "$(wget -qO- https://raw.githubusercontent.com/<USER>/<REPO>/main/install.sh)"
+```
