@@ -105,7 +105,7 @@ if [ -z "${CONTENT_LENGTH:-}" ] || [ "${CONTENT_LENGTH:-0}" = "0" ]; then
       <textarea name="message" maxlength="160" required></textarea>
 
       <button type="submit">Send SMS</button>
-      <p class="muted">Tip: set password in <code>/www/sms/config.sh</code>. Keep this LAN-only.</p>
+      <p class="muted">Created with <3 by Zippy -  <a href="https://techrelay.xyz">Tech Relay</p>
     </form>
   </div>
 </body>
@@ -331,4 +331,4 @@ echo "Installed MR6500 SMS Web."
 echo "Config: $CFG"
 echo "Send:  http://<router-ip>:${SMS_PORT}/cgi-bin/sms_send.sh"
 echo "Inbox: http://<router-ip>:${SMS_PORT}/cgi-bin/sms_inbox.sh"
-echo "Tip: change password by editing $CFG"
+echo "Created with <3 by Zippy -  <a href="https://techrelay.xyz">Tech Relay"
