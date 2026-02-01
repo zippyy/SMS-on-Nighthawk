@@ -8,4 +8,4 @@ rm -rf "$WWW_ROOT/sms" 2>/dev/null || true
 
 pkill httpd 2>/dev/null || true
 echo "Uninstalled and stopped httpd (if it was ours)."
-echo "Created with <3 by Zippy -  <a href="https://techrelay.xyz">Tech Relay"
+echo "Created with <3 by Zippy - https://techrelay.xyz"
