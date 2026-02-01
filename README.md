@@ -20,5 +20,4 @@ Run on the router over SSH:
 
 ```sh
 sh -c "$(wget -qO- https://raw.githubusercontent.com/zippyy/SMS-on-Nighthawk/main/install.sh)"
-"
 ```
