@@ -169,7 +169,7 @@ if [ -z "${CONTENT_LENGTH:-}" ] || [ "${CONTENT_LENGTH:-0}" = "0" ]; then
 
 <div class="card">
 <h2>Send SMS</h2>
-<p class="muted">E.164 required (e.g. +17192291657). Max 160 chars. LAN-only recommended.</p>
+<p class="muted">E.164 required (e.g. +13038675309). Max 160 chars. LAN-only recommended.</p>
 <form method="POST">
   <div class="row">
     <div>
@@ -178,7 +178,7 @@ if [ -z "${CONTENT_LENGTH:-}" ] || [ "${CONTENT_LENGTH:-0}" = "0" ]; then
     </div>
     <div>
       <label>To</label>
-      <input name="to" placeholder="+17192291657" maxlength="16" required>
+      <input name="to" placeholder="+13038675309" maxlength="16" required>
     </div>
   </div>
   <label>Message</label>
